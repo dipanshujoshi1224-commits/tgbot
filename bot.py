@@ -7,7 +7,7 @@ import os
 import re
 
 # ==================== CONFIGURATION ====================
-BOT_TOKEN = "7979137564:AAGYW0_jS9UQOkKswLgH-JKFL2uMYfyWrKo"   # ← CHANGE THIS!
+BOT_TOKEN = "BOTTOKEN"   # ← CHANGE THIS!
 ADMIN_IDS = [7287792422]            # Your Telegram ID
 DATA_FILE = "bot_data.json"
 
