@@ -1,0 +1,138 @@
+ <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Word Copier</title>
+
+<style>
+body{
+  margin:0;
+  padding:20px;
+  background:#111;
+  color:white;
+  font-family:Arial,sans-serif;
+  text-align:center;
+}
+
+h2{
+  margin-bottom:20px;
+}
+
+#letters{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(55px,1fr));
+  gap:10px;
+  max-width:700px;
+  margin:auto;
+}
+
+button{
+  padding:14px;
+  font-size:18px;
+  font-weight:bold;
+  border:none;
+  border-radius:10px;
+  background:#222;
+  color:white;
+  cursor:pointer;
+}
+
+button:hover{
+  background:#333;
+}
+
+#status{
+  margin-top:20px;
+  color:#aaa;
+  font-size:16px;
+}
+</style>
+</head>
+
+<body>
+
+<h2>Click Letter → Last Word Copied</h2>
+
+<div id="letters"></div>
+<div id="status">Loading dictionary...</div>
+
+<script>
+const buckets = {};
+
+// create a-z buckets
+for(let i=97;i<=122;i++){
+  buckets[String.fromCharCode(i)] = [];
+}
+
+async function loadWords(){
+  try{
+    const res = await fetch("words.txt");
+    const text = await res.text();
+
+    const allWords = text
+      .split(/\r?\n/)
+      .map(w => w.trim().toLowerCase())
+      .filter(w =>
+        /^[a-z]+$/.test(w) &&
+        w.length >= 10
+      );
+
+    // words.txt is alphabetical, so order stays same
+    for(const word of allWords){
+      buckets[word[0]].push(word);
+    }
+
+    document.getElementById("status").innerText =
+      "Loaded " + allWords.length + " words";
+  }
+  catch(err){
+    document.getElementById("status").innerText =
+      "Failed to load words.txt";
+  }
+}
+
+function getWord(letter){
+  letter = letter.toLowerCase();
+
+  if(buckets[letter].length === 0){
+    return null;
+  }
+
+  // gives last word, then previous last next click
+  return buckets[letter].pop();
+}
+
+async function start(){
+  await loadWords();
+
+  const box = document.getElementById("letters");
+  const status = document.getElementById("status");
+
+  for(let i=65;i<=90;i++){
+    const letter = String.fromCharCode(i);
+
+    const btn = document.createElement("button");
+    btn.innerText = letter;
+
+    btn.onclick = async () => {
+      const word = getWord(letter);
+
+      if(!word){
+        status.innerText = "No words left for " + letter;
+        return;
+      }
+
+      await navigator.clipboard.writeText(word);
+      status.innerText = "Copied: " + word;
+    };
+
+    box.appendChild(btn);
+  }
+}
+
+start();
+</script>
+
+</body>
+</html>
