@@ -15,6 +15,10 @@ ADMIN_IDS = [7287792422]
 DATA_FILE = "bot_data.json"
 
 client = Groq(api_key=GROQ_API_KEY)
+MAX_OUTPUT_CHARS = 2000
+MAX_TOKENS = 400
+MAX_REPETITION_ALLOWED = 50
+MAX_TELEGRAM_LIMIT = 4096
 
 # ==================== RATE LIMIT ====================
 user_cooldowns = {}
