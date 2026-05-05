@@ -136,7 +136,7 @@ async def talk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(response)
     except Exception as e:
         print(e)
-        await update.message.reply_text("AI error.")
+        await update.message.reply_text(f"AI error: {e}")
 
 # ==================== AUTO AI ====================
 async def auto_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
