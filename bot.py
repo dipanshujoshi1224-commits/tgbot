@@ -346,9 +346,7 @@ def main():
     app.add_handler(CommandHandler("del", delete_msg))
     app.add_handler(CommandHandler("id", get_id))
 
-    app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages)
-    )
+    
 
     print("🚀 Bot Running...")
     app.run_polling(drop_pending_updates=True)
