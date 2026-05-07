@@ -1,34 +1,45 @@
 import json
 import os
 import re
+import requests
+
 from datetime import datetime, timedelta
 from groq import Groq
+
 from telegram import Update, ChatPermissions
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ContextTypes,
+)
 
 # ==================== CONFIG ====================
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
 ADMIN_IDS = [7287792422]
 DATA_FILE = "bot_data.json"
 
 client = Groq(api_key=GROQ_API_KEY)
+
 MAX_TELEGRAM_LIMIT = 4096
 
 # ==================== RATE LIMIT ====================
 user_cooldowns = {}
-auto_ai_cooldowns = {}
 
 COOLDOWN_SECONDS = 15
-AUTO_AI_COOLDOWN = 10
 
 # ==================== DATA ====================
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r") as f:
             return json.load(f)
-    return {"warns": {}, "memory": {}}
+
+    return {
+        "warns": {},
+        "memory": {}
+    }
 
 def save_data(data):
     with open(DATA_FILE, "w") as f:
@@ -39,16 +50,24 @@ bot_data = load_data()
 # ==================== HELPERS ====================
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+
     if user.id in ADMIN_IDS:
         return True
+
     try:
-        member = await context.bot.get_chat_member(update.effective_chat.id, user.id)
+        member = await context.bot.get_chat_member(
+            update.effective_chat.id,
+            user.id
+        )
+
         return member.status in ["creator", "administrator"]
+
     except:
         return False
 
 def parse_time(time_str):
     match = re.match(r"(\d+)([dhm])", time_str)
+
     if not match:
         return timedelta(hours=1)
 
@@ -56,8 +75,10 @@ def parse_time(time_str):
 
     if unit == "d":
         return timedelta(days=value)
+
     if unit == "h":
         return timedelta(hours=value)
+
     if unit == "m":
         return timedelta(minutes=value)
 
@@ -75,31 +96,58 @@ async def ask_ai(question, user_id, chat_id):
 
     history = bot_data["memory"][cid][uid]
 
-    # 👑 MASTER MODE (ONLY YOU)
+    # OWNER MODEL
     if user_id in ADMIN_IDS:
         model = "llama-3.3-70b-versatile"
-        system_prompt = "You are an expert AI assistant. Give deep, precise, high-level answers. reply in short,clear answers under 8 lines."
+
+        system_prompt = (
+            "You are an expert AI assistant. "
+            "Reply shortly, clearly, intelligently. "
+            "Maximum 8 short lines."
+        )
+
     else:
-        model =  "llama-3.1-8b-instant"
-        system_prompt =  "You are a smart Telegram assistant. Reply in short, clear answers under 6 lines."
+        model = "llama-3.1-8b-instant"
 
-    messages = [{"role": "system", "content": system_prompt}]
+        system_prompt = (
+            "You are a smart Telegram assistant. "
+            "Reply briefly and clearly. "
+            "Maximum 6 short lines."
+        )
 
+    messages = [
+        {
+            "role": "system",
+            "content": system_prompt
+        }
+    ]
+
+    # MEMORY
     for msg in history[-6:]:
         messages.append(msg)
 
-    messages.append({"role": "user", "content": question})
+    messages.append({
+        "role": "user",
+        "content": question
+    })
 
     chat_completion = client.chat.completions.create(
-        messages=messages,
         model=model,
+        messages=messages
     )
 
     reply = chat_completion.choices[0].message.content
 
-    # Save memory
-    history.append({"role": "user", "content": question})
-    history.append({"role": "assistant", "content": reply})
+    # SAVE MEMORY
+    history.append({
+        "role": "user",
+        "content": question
+    })
+
+    history.append({
+        "role": "assistant",
+        "content": reply
+    })
 
     if len(history) > 20:
         history[:] = history[-20:]
@@ -114,69 +162,72 @@ async def talk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     now = datetime.now()
 
+    # COOLDOWN
     if user_id in user_cooldowns:
-        remaining = (user_cooldowns[user_id] - now).total_seconds()
+
+        remaining = (
+            user_cooldowns[user_id] - now
+        ).total_seconds()
+
         if remaining > 0:
-            return await update.message.reply_text(f"⏳ Wait {int(remaining)} seconds.")
+            return await update.message.reply_text(
+                f"⏳ Wait {int(remaining)} sec."
+            )
 
-    user_cooldowns[user_id] = now + timedelta(seconds=COOLDOWN_SECONDS)
+    user_cooldowns[user_id] = (
+        now + timedelta(seconds=COOLDOWN_SECONDS)
+    )
 
-    if not context.args:
-        return await update.message.reply_text("Usage: /talk question")
+    # REPLY IMAGE SUPPORT
+    question = ""
 
-    question = " ".join(context.args)
+    if context.args:
+        question = " ".join(context.args)
+
+    elif update.message.reply_to_message:
+        replied = update.message.reply_to_message
+
+        if replied.text:
+            question = replied.text
+
+        elif replied.caption:
+            question = replied.caption
+
+        else:
+            question = "Explain this."
+
+    else:
+        return await update.message.reply_text(
+            "Usage:\n/talk question\nor reply with /talk"
+        )
 
     if len(question) > 500:
         return await update.message.reply_text("❌ Too long.")
 
-    await context.bot.send_chat_action(update.effective_chat.id, "typing")
-
-    try:
-        response = await ask_ai(question, user_id, update.effective_chat.id)
-        await update.message.reply_text(response)
-    except Exception as e:
-        print(e)
-        await update.message.reply_text(f"AI error: {e}")
-
-# ==================== AUTO AI ====================
-async def auto_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    if not update.message or not update.message.text:
-        return
-
-    is_private = update.message.chat.type == "private"
-    is_mention = f"@{context.bot.username}" in update.message.text
-    is_reply = (
-        update.message.reply_to_message and
-        update.message.reply_to_message.from_user.id == context.bot.id
+    await context.bot.send_chat_action(
+        update.effective_chat.id,
+        "typing"
     )
 
-    if is_mention or is_reply:
-        user_id = update.effective_user.id
-        now = datetime.now()
+    try:
+        response = await ask_ai(
+            question,
+            user_id,
+            update.effective_chat.id
+        )
 
-        if user_id in auto_ai_cooldowns:
-            remaining = (auto_ai_cooldowns[user_id] - now).total_seconds()
-            if remaining > 0:
-                return
+        await update.message.reply_text(response)
 
-        auto_ai_cooldowns[user_id] = now + timedelta(seconds=AUTO_AI_COOLDOWN)
+    except Exception as e:
+        print(e)
 
-        text = update.message.text.replace(f"@{context.bot.username}", "")
-
-        if len(text) > 500:
-            return
-
-        await context.bot.send_chat_action(update.effective_chat.id, "typing")
-
-        try:
-            response = await ask_ai(text, user_id, update.effective_chat.id)
-            await update.message.reply_text(response)
-        except:
-            pass
+        await update.message.reply_text(
+            f"AI error:\n{e}"
+        )
 
 # ==================== RESET ====================
 async def reset_memory(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     user_id = str(update.effective_user.id)
     chat_id = str(update.effective_chat.id)
 
@@ -185,171 +236,347 @@ async def reset_memory(update: Update, context: ContextTypes.DEFAULT_TYPE):
             bot_data["memory"][chat_id][user_id] = []
 
     save_data(bot_data)
-    await update.message.reply_text("🧠 Memory cleared!")
 
-# ==================== YOUR ORIGINAL COMMANDS ====================
+    await update.message.reply_text(
+        "🧠 Memory cleared!"
+    )
+
+# ==================== START ====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🤖 AI Group Manager is Online! Use /help")
 
+    await update.message.reply_text(
+        "🤖 AI Group Manager Online!"
+    )
+
+# ==================== HELP ====================
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     await update.message.reply_text("""
 🔧 Admin:
-/promote (reply)
-/demote (reply)
-/ban (reply)
-/kick (reply)
-/mute 1h (reply)
-/unmute (reply)
-/warn (reply)
+/promote
+/demote
+/ban
+/kick
+/mute 1h
+/unmute
+/warn
 
 📌 Messages:
-/pin (reply)
+/pin
 /unpin
-/purge (reply)
-/del (reply)
+/purge
+/del
 
 🤖 AI:
 /talk question
-/reset (clear memory)
+/waifu
+/reset
 
 🆔 Utility:
 /id
 """)
 
-# (ALL YOUR MODERATION COMMANDS — unchanged)
-# 👉 I kept them SAME as your original code
-
+# ==================== ADMIN ====================
 async def promote(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, context): return
-    if not update.message.reply_to_message: return
+
+    if not await is_admin(update, context):
+        return
+
+    if not update.message.reply_to_message:
+        return
+
     user = update.message.reply_to_message.from_user
-    await context.bot.promote_chat_member(update.effective_chat.id, user.id, can_delete_messages=True, can_restrict_members=True)
+
+    await context.bot.promote_chat_member(
+        update.effective_chat.id,
+        user.id,
+        can_delete_messages=True,
+        can_restrict_members=True
+    )
+
     await update.message.reply_text("✅ Promoted")
 
 async def demote(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, context): return
-    if not update.message.reply_to_message: return
+
+    if not await is_admin(update, context):
+        return
+
+    if not update.message.reply_to_message:
+        return
+
     user = update.message.reply_to_message.from_user
-    await context.bot.promote_chat_member(update.effective_chat.id, user.id, can_delete_messages=False, can_restrict_members=False)
+
+    await context.bot.promote_chat_member(
+        update.effective_chat.id,
+        user.id,
+        can_delete_messages=False,
+        can_restrict_members=False
+    )
+
     await update.message.reply_text("✅ Demoted")
 
 async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, context): return
+
+    if not await is_admin(update, context):
+        return
+
     user = update.message.reply_to_message.from_user
-    await context.bot.ban_chat_member(update.effective_chat.id, user.id)
+
+    await context.bot.ban_chat_member(
+        update.effective_chat.id,
+        user.id
+    )
+
     await update.message.reply_text("🚫 Banned")
 
 async def kick(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, context): return
+
+    if not await is_admin(update, context):
+        return
+
     user = update.message.reply_to_message.from_user
-    await context.bot.ban_chat_member(update.effective_chat.id, user.id)
-    await context.bot.unban_chat_member(update.effective_chat.id, user.id)
+
+    await context.bot.ban_chat_member(
+        update.effective_chat.id,
+        user.id
+    )
+
+    await context.bot.unban_chat_member(
+        update.effective_chat.id,
+        user.id
+    )
+
     await update.message.reply_text("👢 Kicked")
 
 async def mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, context): return
+
+    if not await is_admin(update, context):
+        return
+
     user = update.message.reply_to_message.from_user
-    duration = parse_time(context.args[0]) if context.args else timedelta(hours=1)
-    await context.bot.restrict_chat_member(update.effective_chat.id, user.id, ChatPermissions(can_send_messages=False), until_date=datetime.now() + duration)
+
+    duration = (
+        parse_time(context.args[0])
+        if context.args
+        else timedelta(hours=1)
+    )
+
+    await context.bot.restrict_chat_member(
+        update.effective_chat.id,
+        user.id,
+        ChatPermissions(can_send_messages=False),
+        until_date=datetime.now() + duration
+    )
+
     await update.message.reply_text("🔇 Muted")
 
 async def unmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, context): return
+
+    if not await is_admin(update, context):
+        return
+
     user = update.message.reply_to_message.from_user
-    await context.bot.restrict_chat_member(update.effective_chat.id, user.id, ChatPermissions(can_send_messages=True))
+
+    await context.bot.restrict_chat_member(
+        update.effective_chat.id,
+        user.id,
+        ChatPermissions(can_send_messages=True)
+    )
+
     await update.message.reply_text("🔊 Unmuted")
 
 async def warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, context): return
+
+    if not await is_admin(update, context):
+        return
+
     user = update.message.reply_to_message.from_user
-    cid, uid = str(update.effective_chat.id), str(user.id)
+
+    cid = str(update.effective_chat.id)
+    uid = str(user.id)
 
     bot_data["warns"].setdefault(cid, {})
-    bot_data["warns"][cid][uid] = bot_data["warns"][cid].get(uid, 0) + 1
+
+    bot_data["warns"][cid][uid] = (
+        bot_data["warns"][cid].get(uid, 0) + 1
+    )
 
     count = bot_data["warns"][cid][uid]
 
     if count >= 3:
-        await context.bot.ban_chat_member(update.effective_chat.id, user.id)
-        await update.message.reply_text("🚫 Banned (3 warns)")
+
+        await context.bot.ban_chat_member(
+            update.effective_chat.id,
+            user.id
+        )
+
+        await update.message.reply_text(
+            "🚫 Banned (3 warns)"
+        )
+
         bot_data["warns"][cid][uid] = 0
+
     else:
-        await update.message.reply_text(f"⚠ Warned ({count}/3)")
+        await update.message.reply_text(
+            f"⚠ Warned ({count}/3)"
+        )
 
     save_data(bot_data)
 
+# ==================== PIN ====================
 async def pin_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, context): return
+
+    if not await is_admin(update, context):
+        return
+
     msg = update.message.reply_to_message
-    await context.bot.pin_chat_message(update.effective_chat.id, msg.message_id)
+
+    await context.bot.pin_chat_message(
+        update.effective_chat.id,
+        msg.message_id
+    )
+
     await update.message.reply_text("📌 Pinned")
 
 async def unpin_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, context): return
-    await context.bot.unpin_chat_message(update.effective_chat.id)
+
+    if not await is_admin(update, context):
+        return
+
+    await context.bot.unpin_chat_message(
+        update.effective_chat.id
+    )
+
     await update.message.reply_text("📌 Unpinned")
 
+# ==================== DELETE ====================
 async def purge(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, context): return
+
+    if not await is_admin(update, context):
+        return
+
     start = update.message.reply_to_message.message_id
     end = update.message.message_id
+
     for i in range(start, end + 1):
+
         try:
-            await context.bot.delete_message(update.effective_chat.id, i)
+            await context.bot.delete_message(
+                update.effective_chat.id,
+                i
+            )
+
         except:
             pass
 
 async def delete_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, context): return
+
+    if not await is_admin(update, context):
+        return
+
     await update.message.reply_to_message.delete()
     await update.message.delete()
 
+# ==================== ID ====================
 async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"User ID: {update.effective_user.id}\nChat ID: {update.effective_chat.id}")
 
+    await update.message.reply_text(
+        f"User ID: {update.effective_user.id}\n"
+        f"Chat ID: {update.effective_chat.id}"
+    )
+
+# ==================== WAIFU ====================
 async def waifu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not update.message.reply_to_message:
         return await update.message.reply_text(
-            "Reply to an anime image with /waifu"
+            "Reply to anime image with /waifu"
         )
 
     photo = update.message.reply_to_message.photo
 
     if not photo:
         return await update.message.reply_text(
-            "❌ Reply to a photo only."
+            "❌ Reply to photo only."
         )
 
     await update.message.reply_text(
         "👀 Detecting waifu..."
     )
-# ==================== HANDLER ====================
-async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    if not update.message or not update.message.text:
-        return
+    try:
+        # GET PHOTO
+        file = await context.bot.get_file(
+            photo[-1].file_id
+        )
 
-    text = update.message.text.lower()
+        image_url = file.file_path
 
-    if not await is_admin(update, context):
-        if "t.me/" in text or "telegram.me/" in text:
-            await update.message.delete()
-            return
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
 
-    await auto_ai(update, context)
+        data = {
+            "model": "google/gemini-2.5-flash",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Identify this anime character. "
+                                "Reply only with character name "
+                                "and anime name."
+                            )
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": image_url
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=data
+        )
+
+        result = response.json()
+
+        answer = result["choices"][0]["message"]["content"]
+
+        await update.message.reply_text(answer)
+
+    except Exception as e:
+        print(e)
+
+        await update.message.reply_text(
+            "❌ Failed to detect waifu."
+        )
 
 # ==================== MAIN ====================
 def main():
 
     app = Application.builder().token(BOT_TOKEN).build()
 
+    # BASIC
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("id", get_id))
+
+    # AI
     app.add_handler(CommandHandler("talk", talk))
     app.add_handler(CommandHandler("reset", reset_memory))
+    app.add_handler(CommandHandler("waifu", waifu))
 
-    # ALL COMMANDS BACK
+    # ADMIN
     app.add_handler(CommandHandler("promote", promote))
     app.add_handler(CommandHandler("demote", demote))
     app.add_handler(CommandHandler("ban", ban))
@@ -357,16 +584,17 @@ def main():
     app.add_handler(CommandHandler("mute", mute))
     app.add_handler(CommandHandler("unmute", unmute))
     app.add_handler(CommandHandler("warn", warn))
+
+    # MESSAGE
     app.add_handler(CommandHandler("pin", pin_msg))
     app.add_handler(CommandHandler("unpin", unpin_msg))
     app.add_handler(CommandHandler("purge", purge))
     app.add_handler(CommandHandler("del", delete_msg))
-    app.add_handler(CommandHandler("id", get_id))
-    app.add_handler(CommandHandler("waifu", waifu))
-       
 
     print("🚀 Bot Running...")
+
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
+
