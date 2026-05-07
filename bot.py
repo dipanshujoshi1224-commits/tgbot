@@ -151,8 +151,7 @@ async def auto_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
         update.message.reply_to_message.from_user.id == context.bot.id
     )
 
-    if is_private or is_mention or is_reply:
-
+    if is_mention or is_reply:
         user_id = update.effective_user.id
         now = datetime.now()
 
