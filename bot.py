@@ -307,10 +307,22 @@ async def delete_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"User ID: {update.effective_user.id}\nChat ID: {update.effective_chat.id}")
 
-async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def waifu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not update.message.reply_to_message:
+        return await update.message.reply_text(
+            "Reply to an anime image with /waifu"
+        )
+
+    photo = update.message.reply_to_message.photo
+
+    if not photo:
+        return await update.message.reply_text(
+            "❌ Reply to a photo only."
+        )
 
     await update.message.reply_text(
-        "📸 Image received! Waifu detection coming soon."
+        "👀 Detecting waifu..."
     )
 # ==================== HANDLER ====================
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -350,10 +362,8 @@ def main():
     app.add_handler(CommandHandler("purge", purge))
     app.add_handler(CommandHandler("del", delete_msg))
     app.add_handler(CommandHandler("id", get_id))
-    app.add_handler(
-    MessageHandler(filters.PHOTO, photo_handler)
-)
-    
+    app.add_handler(CommandHandler("waifu", waifu))
+       
 
     print("🚀 Bot Running...")
     app.run_polling(drop_pending_updates=True)
