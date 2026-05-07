@@ -81,7 +81,7 @@ async def ask_ai(question, user_id, chat_id):
         system_prompt = "You are an expert AI assistant. Give deep, precise, high-level answers. reply in short,clear answers under 8 lines."
     else:
         model =  "llama-3.1-8b-instant"
-        system_prompt = system_prompt = "You are a smart Telegram assistant. Reply in short, clear answers under 6 lines."
+        system_prompt =  "You are a smart Telegram assistant. Reply in short, clear answers under 6 lines."
 
     messages = [{"role": "system", "content": system_prompt}]
 
@@ -307,6 +307,11 @@ async def delete_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"User ID: {update.effective_user.id}\nChat ID: {update.effective_chat.id}")
 
+async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    await update.message.reply_text(
+        "📸 Image received! Waifu detection coming soon."
+    )
 # ==================== HANDLER ====================
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -345,7 +350,9 @@ def main():
     app.add_handler(CommandHandler("purge", purge))
     app.add_handler(CommandHandler("del", delete_msg))
     app.add_handler(CommandHandler("id", get_id))
-
+    app.add_handler(
+    MessageHandler(filters.PHOTO, photo_handler)
+)
     
 
     print("🚀 Bot Running...")
