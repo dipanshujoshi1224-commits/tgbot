@@ -519,7 +519,7 @@ async def waifu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
 
         data = {
-            "model": "google/gemini-2.5-flash",
+        "model" :   "meta-llama/llama-3.2-11b-vision-instruct:free",
             "messages": [
                 {
                     "role": "user",
