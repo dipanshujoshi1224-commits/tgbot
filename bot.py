@@ -500,17 +500,18 @@ async def waifu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "❌ Reply to photo only."
         )
 
-    await update.message.reply_text(
-        "👀 Detecting waifu..."
-    )
+    await update.message.reply_text("👀 Detecting waifu...")
 
     try:
-        # GET PHOTO
-        file = await context.bot.get_file(
-            photo[-1].file_id
-        )
+        import base64
 
-        image_url = file.file_path
+        # Download telegram image
+        file = await context.bot.get_file(photo[-1].file_id)
+
+        downloaded = await file.download_as_bytearray()
+
+        # Convert image to base64
+        image_base64 = base64.b64encode(downloaded).decode("utf-8")
 
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -525,16 +526,12 @@ async def waifu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "content": [
                         {
                             "type": "text",
-                            "text": (
-                                "Identify this anime character. "
-                                "Reply only with character name "
-                                "and anime name."
-                            )
+                            "text": "Identify this anime character. Reply only with character name and anime."
                         },
                         {
                             "type": "image_url",
                             "image_url": {
-                                "url": image_url
+                                "url": f"data:image/jpeg;base64,{image_base64}"
                             }
                         }
                     ]
@@ -550,15 +547,16 @@ async def waifu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         result = response.json()
 
+        print(result)
+
         answer = result["choices"][0]["message"]["content"]
 
         await update.message.reply_text(answer)
 
     except Exception as e:
         print(e)
-
         await update.message.reply_text(
-            "❌ Failed to detect waifu."
+            f"❌ Failed:\n{e}"
         )
 
 # ==================== MAIN ====================
