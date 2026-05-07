@@ -78,10 +78,10 @@ async def ask_ai(question, user_id, chat_id):
     # 👑 MASTER MODE (ONLY YOU)
     if user_id in ADMIN_IDS:
         model = "llama-3.3-70b-versatile"
-        system_prompt = "You are an expert AI assistant. Give deep, precise, high-level answers."
+        system_prompt = "You are an expert AI assistant. Give deep, precise, high-level answers. reply in short,clear answers under 8 lines."
     else:
         model =  "llama-3.1-8b-instant"
-        system_prompt = "You are a smart, friendly Telegram group assistant."
+        system_prompt = system_prompt = "You are a smart Telegram assistant. Reply in short, clear answers under 6 lines."
 
     messages = [{"role": "system", "content": system_prompt}]
 
