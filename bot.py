@@ -2,6 +2,7 @@ import json
 import os
 import re
 import requests
+import base64
 
 from datetime import datetime, timedelta
 from groq import Groq
@@ -32,6 +33,7 @@ COOLDOWN_SECONDS = 15
 
 # ==================== DATA ====================
 def load_data():
+
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r") as f:
             return json.load(f)
@@ -42,6 +44,7 @@ def load_data():
     }
 
 def save_data(data):
+
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
@@ -49,6 +52,7 @@ bot_data = load_data()
 
 # ==================== HELPERS ====================
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     user = update.effective_user
 
     if user.id in ADMIN_IDS:
@@ -66,6 +70,7 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return False
 
 def parse_time(time_str):
+
     match = re.match(r"(\d+)([dhm])", time_str)
 
     if not match:
@@ -98,6 +103,7 @@ async def ask_ai(question, user_id, chat_id):
 
     # OWNER MODEL
     if user_id in ADMIN_IDS:
+
         model = "llama-3.3-70b-versatile"
 
         system_prompt = (
@@ -107,6 +113,7 @@ async def ask_ai(question, user_id, chat_id):
         )
 
     else:
+
         model = "llama-3.1-8b-instant"
 
         system_prompt = (
@@ -178,13 +185,13 @@ async def talk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         now + timedelta(seconds=COOLDOWN_SECONDS)
     )
 
-    # REPLY IMAGE SUPPORT
     question = ""
 
     if context.args:
         question = " ".join(context.args)
 
     elif update.message.reply_to_message:
+
         replied = update.message.reply_to_message
 
         if replied.text:
@@ -202,7 +209,9 @@ async def talk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     if len(question) > 500:
-        return await update.message.reply_text("❌ Too long.")
+        return await update.message.reply_text(
+            "❌ Too long."
+        )
 
     await context.bot.send_chat_action(
         update.effective_chat.id,
@@ -210,6 +219,7 @@ async def talk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     try:
+
         response = await ask_ai(
             question,
             user_id,
@@ -219,6 +229,7 @@ async def talk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(response)
 
     except Exception as e:
+
         print(e)
 
         await update.message.reply_text(
@@ -417,6 +428,7 @@ async def warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bot_data["warns"][cid][uid] = 0
 
     else:
+
         await update.message.reply_text(
             f"⚠ Warned ({count}/3)"
         )
@@ -500,18 +512,23 @@ async def waifu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "❌ Reply to photo only."
         )
 
-    await update.message.reply_text("👀 Detecting waifu...")
+    await update.message.reply_text(
+        "👀 Detecting waifu..."
+    )
 
     try:
-        import base64
 
-        # Download telegram image
-        file = await context.bot.get_file(photo[-1].file_id)
+        # Download image
+        file = await context.bot.get_file(
+            photo[-1].file_id
+        )
 
         downloaded = await file.download_as_bytearray()
 
-        # Convert image to base64
-        image_base64 = base64.b64encode(downloaded).decode("utf-8")
+        # Convert to base64
+        image_base64 = base64.b64encode(
+            downloaded
+        ).decode("utf-8")
 
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -519,19 +536,27 @@ async def waifu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
 
         data = {
-        "model" :   "meta-llama/llama-3.2-11b-vision-instruct:free",
+            "model": "meta-llama/llama-3.2-11b-vision-instruct:free",
+
             "messages": [
                 {
                     "role": "user",
+
                     "content": [
                         {
                             "type": "text",
-                            "text": "Identify this anime character. Reply only with character name and anime."
+
+                            "text":
+                            "Identify this anime character. "
+                            "Reply only with character name and anime."
                         },
+
                         {
                             "type": "image_url",
+
                             "image_url": {
-                                "url": f"data:image/jpeg;base64,{image_base64}"
+                                "url":
+                                f"data:image/jpeg;base64,{image_base64}"
                             }
                         }
                     ]
@@ -549,12 +574,20 @@ async def waifu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         print(result)
 
+        if "choices" not in result:
+
+            return await update.message.reply_text(
+                f"❌ API Error:\n{result}"
+            )
+
         answer = result["choices"][0]["message"]["content"]
 
         await update.message.reply_text(answer)
 
     except Exception as e:
+
         print(e)
+
         await update.message.reply_text(
             f"❌ Failed:\n{e}"
         )
@@ -595,4 +628,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
