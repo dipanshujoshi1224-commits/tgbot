@@ -64,7 +64,10 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user.id
         )
 
-        return member.status in ["creator", "administrator"]
+        return member.status in [
+            "creator",
+            "administrator"
+        ]
 
     except:
         return False
@@ -129,7 +132,6 @@ async def ask_ai(question, user_id, chat_id):
         }
     ]
 
-    # MEMORY
     for msg in history[-6:]:
         messages.append(msg)
 
@@ -188,6 +190,7 @@ async def talk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     question = ""
 
     if context.args:
+
         question = " ".join(context.args)
 
     elif update.message.reply_to_message:
@@ -204,14 +207,13 @@ async def talk(update: Update, context: ContextTypes.DEFAULT_TYPE):
             question = "Explain this."
 
     else:
+
         return await update.message.reply_text(
             "Usage:\n/talk question\nor reply with /talk"
         )
 
     if len(question) > 500:
-        return await update.message.reply_text(
-            "❌ Too long."
-        )
+        return await update.message.reply_text("❌ Too long.")
 
     await context.bot.send_chat_action(
         update.effective_chat.id,
@@ -256,19 +258,24 @@ async def reset_memory(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
-        "🤖 AI Group Manager Online!"
+        "🤖 AI Manager Online!"
     )
 
 # ==================== HELP ====================
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("""
+🤖 AI:
+/talk question
+/waifu
+/reset
+
 🔧 Admin:
 /promote
 /demote
 /ban
 /kick
-/mute 1h
+/mute
 /unmute
 /warn
 
@@ -278,23 +285,124 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /purge
 /del
 
-🤖 AI:
-/talk question
-/waifu
-/reset
-
 🆔 Utility:
 /id
 """)
 
-# ==================== ADMIN ====================
+# ==================== ID ====================
+async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    await update.message.reply_text(
+        f"User ID: {update.effective_user.id}\n"
+        f"Chat ID: {update.effective_chat.id}"
+    )
+
+# ==================== WAIFU ====================
+async def waifu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not update.message.reply_to_message:
+
+        return await update.message.reply_text(
+            "Reply to anime image with /waifu"
+        )
+
+    photo = update.message.reply_to_message.photo
+
+    if not photo:
+
+        return await update.message.reply_text(
+            "❌ Reply to photo only."
+        )
+
+    msg = await update.message.reply_text(
+        "👀 Detecting waifu..."
+    )
+
+    try:
+
+        # DOWNLOAD IMAGE
+        file = await context.bot.get_file(photo[-1].file_id)
+
+        downloaded = await file.download_as_bytearray()
+
+        # BASE64
+        image_base64 = base64.b64encode(
+            downloaded
+        ).decode("utf-8")
+
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        # IMPORTANT MODEL
+        data = {
+            "model": "openai/gpt-4o-mini",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Identify this anime character. "
+                                "Reply only with character name "
+                                "and anime."
+                            )
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": (
+                                    f"data:image/jpeg;base64,"
+                                    f"{image_base64}"
+                                )
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=data
+        )
+
+        print(response.status_code)
+        print(response.text)
+
+        result = response.json()
+
+        if "choices" not in result:
+
+            return await msg.edit_text(
+                f"❌ API Error:\n{result}"
+            )
+
+        answer = result["choices"][0]["message"]["content"]
+
+        await msg.edit_text(answer)
+
+    except Exception as e:
+
+        print(e)
+
+        await msg.edit_text(
+            f"❌ Failed:\n{e}"
+        )
+        # ==================== ADMIN ====================
+
 async def promote(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not await is_admin(update, context):
         return
 
     if not update.message.reply_to_message:
-        return
+        return await update.message.reply_text(
+            "Reply to user."
+        )
 
     user = update.message.reply_to_message.from_user
 
@@ -307,13 +415,16 @@ async def promote(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("✅ Promoted")
 
+
 async def demote(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not await is_admin(update, context):
         return
 
     if not update.message.reply_to_message:
-        return
+        return await update.message.reply_text(
+            "Reply to user."
+        )
 
     user = update.message.reply_to_message.from_user
 
@@ -326,10 +437,16 @@ async def demote(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("✅ Demoted")
 
+
 async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not await is_admin(update, context):
         return
+
+    if not update.message.reply_to_message:
+        return await update.message.reply_text(
+            "Reply to user."
+        )
 
     user = update.message.reply_to_message.from_user
 
@@ -340,10 +457,16 @@ async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("🚫 Banned")
 
+
 async def kick(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not await is_admin(update, context):
         return
+
+    if not update.message.reply_to_message:
+        return await update.message.reply_text(
+            "Reply to user."
+        )
 
     user = update.message.reply_to_message.from_user
 
@@ -359,10 +482,16 @@ async def kick(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("👢 Kicked")
 
+
 async def mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not await is_admin(update, context):
         return
+
+    if not update.message.reply_to_message:
+        return await update.message.reply_text(
+            "Reply to user."
+        )
 
     user = update.message.reply_to_message.from_user
 
@@ -381,10 +510,16 @@ async def mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("🔇 Muted")
 
+
 async def unmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not await is_admin(update, context):
         return
+
+    if not update.message.reply_to_message:
+        return await update.message.reply_text(
+            "Reply to user."
+        )
 
     user = update.message.reply_to_message.from_user
 
@@ -396,10 +531,16 @@ async def unmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("🔊 Unmuted")
 
+
 async def warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not await is_admin(update, context):
         return
+
+    if not update.message.reply_to_message:
+        return await update.message.reply_text(
+            "Reply to user."
+        )
 
     user = update.message.reply_to_message.from_user
 
@@ -421,11 +562,11 @@ async def warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user.id
         )
 
+        bot_data["warns"][cid][uid] = 0
+
         await update.message.reply_text(
             "🚫 Banned (3 warns)"
         )
-
-        bot_data["warns"][cid][uid] = 0
 
     else:
 
@@ -436,10 +577,16 @@ async def warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_data(bot_data)
 
 # ==================== PIN ====================
+
 async def pin_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not await is_admin(update, context):
         return
+
+    if not update.message.reply_to_message:
+        return await update.message.reply_text(
+            "Reply to message."
+        )
 
     msg = update.message.reply_to_message
 
@@ -449,6 +596,7 @@ async def pin_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     await update.message.reply_text("📌 Pinned")
+
 
 async def unpin_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -462,10 +610,16 @@ async def unpin_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📌 Unpinned")
 
 # ==================== DELETE ====================
+
 async def purge(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not await is_admin(update, context):
         return
+
+    if not update.message.reply_to_message:
+        return await update.message.reply_text(
+            "Reply to message."
+        )
 
     start = update.message.reply_to_message.message_id
     end = update.message.message_id
@@ -481,117 +635,19 @@ async def purge(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
+
 async def delete_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not await is_admin(update, context):
         return
 
-    await update.message.reply_to_message.delete()
-    await update.message.delete()
-
-# ==================== ID ====================
-async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    await update.message.reply_text(
-        f"User ID: {update.effective_user.id}\n"
-        f"Chat ID: {update.effective_chat.id}"
-    )
-
-# ==================== WAIFU ====================
-async def waifu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     if not update.message.reply_to_message:
         return await update.message.reply_text(
-            "Reply to anime image with /waifu"
+            "Reply to message."
         )
 
-    photo = update.message.reply_to_message.photo
-
-    if not photo:
-        return await update.message.reply_text(
-            "❌ Reply to photo only."
-        )
-
-    await update.message.reply_text(
-        "👀 Detecting waifu..."
-    )
-
-    try:
-
-        # Download image
-        file = await context.bot.get_file(
-            photo[-1].file_id
-        )
-
-        downloaded = await file.download_as_bytearray()
-
-        # Convert image to base64
-        image_base64 = base64.b64encode(
-            downloaded
-        ).decode("utf-8")
-
-        headers = {
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
-        }
-
-        data = {
-            "model": "google/gemini-2.0-flash-exp:free",
-
-            "messages": [
-                {
-                    "role": "user",
-
-                    "content": [
-                        {
-                            "type": "text",
-
-                            "text":
-                            "Identify this anime character. "
-                            "Reply only with character name and anime."
-                        },
-
-                        {
-                            "type": "image_url",
-
-                            "image_url": {
-                                "url":
-                                f"data:image/jpeg;base64,{image_base64}"
-                            }
-                        }
-                    ]
-                }
-            ]
-        }
-
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=data
-        )
-
-        result = response.json()
-
-        print(response.status_code)
-        print(result)
-
-        if "choices" not in result:
-
-            return await update.message.reply_text(
-                f"❌ API Error:\n{result}"
-            )
-
-        answer = result["choices"][0]["message"]["content"]
-
-        await update.message.reply_text(answer)
-
-    except Exception as e:
-
-        print(e)
-
-        await update.message.reply_text(
-            f"❌ Failed:\n{e}"
-        )
+    await update.message.reply_to_message.delete()
+    await update.message.delete()
 
 # ==================== MAIN ====================
 def main():
@@ -607,7 +663,6 @@ def main():
     app.add_handler(CommandHandler("talk", talk))
     app.add_handler(CommandHandler("reset", reset_memory))
     app.add_handler(CommandHandler("waifu", waifu))
-
     # ADMIN
     app.add_handler(CommandHandler("promote", promote))
     app.add_handler(CommandHandler("demote", demote))
@@ -617,12 +672,11 @@ def main():
     app.add_handler(CommandHandler("unmute", unmute))
     app.add_handler(CommandHandler("warn", warn))
 
-    # MESSAGE
+# MESSAGE
     app.add_handler(CommandHandler("pin", pin_msg))
     app.add_handler(CommandHandler("unpin", unpin_msg))
     app.add_handler(CommandHandler("purge", purge))
     app.add_handler(CommandHandler("del", delete_msg))
-
     print("🚀 Bot Running...")
 
     app.run_polling(drop_pending_updates=True)
