@@ -108,7 +108,7 @@ async def ask_ai(question, user_id, chat_id):
 
         system_prompt = (
             "You are an expert AI assistant. "
-            "Reply shortly, clearly, intelligently. "
+            "Reply shortly and clearly. "
             "Maximum 8 short lines."
         )
 
@@ -525,7 +525,7 @@ async def waifu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         downloaded = await file.download_as_bytearray()
 
-        # Convert to base64
+        # Convert image to base64
         image_base64 = base64.b64encode(
             downloaded
         ).decode("utf-8")
@@ -536,7 +536,7 @@ async def waifu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
 
         data = {
-            "model":  "qwen/qwen2.5-vl-72b-instruct:free",
+            "model": "google/gemini-2.0-flash-exp:free",
 
             "messages": [
                 {
@@ -572,6 +572,7 @@ async def waifu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         result = response.json()
 
+        print(response.status_code)
         print(result)
 
         if "choices" not in result:
